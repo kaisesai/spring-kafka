@@ -97,6 +97,7 @@ public abstract class MessagingMessageListenerAdapter<K, V> implements ConsumerS
 
 	private HandlerAdapter handlerMethod;
 
+	// 参数类型是否为 List<ConsumerRecord>
 	private boolean isConsumerRecordList;
 
 	private boolean isConsumerRecords;
@@ -126,7 +127,8 @@ public abstract class MessagingMessageListenerAdapter<K, V> implements ConsumerS
 
 	public MessagingMessageListenerAdapter(Object bean, Method method) {
 		this.bean = bean;
-		this.inferredType = determineInferredType(method); // NOSONAR = intentionally not final
+		// 处理推断参数类型
+ 		this.inferredType = determineInferredType(method); // NOSONAR = intentionally not final
 	}
 
 	/**
@@ -305,6 +307,8 @@ public abstract class MessagingMessageListenerAdapter<K, V> implements ConsumerS
 	}
 
 	/**
+	 * 执行处理器
+	 *
 	 * Invoke the handler, wrapping any exception to a {@link ListenerExecutionFailedException}
 	 * with a dedicated error message.
 	 * @param data the data to process during invocation.
@@ -318,6 +322,7 @@ public abstract class MessagingMessageListenerAdapter<K, V> implements ConsumerS
 
 		try {
 			if (data instanceof List && !this.isConsumerRecordList) {
+				// 这里的执行流程
 				return this.handlerMethod.invoke(message, acknowledgment, consumer);
 			}
 			else {
@@ -537,6 +542,8 @@ public abstract class MessagingMessageListenerAdapter<K, V> implements ConsumerS
 	}
 
 	/**
+	 * 子类可以重写这个方法，定义一个 payload 目标类型
+	 *
 	 * Subclasses can override this method to use a different mechanism to determine
 	 * the target type of the payload conversion.
 	 * @param method the method.
@@ -551,30 +558,40 @@ public abstract class MessagingMessageListenerAdapter<K, V> implements ConsumerS
 		int allowedBatchParameters = 1;
 		int notConvertibleParameters = 0;
 
+		// 遍历方法参数
 		for (int i = 0; i < method.getParameterCount(); i++) {
+			// 方法参数
 			MethodParameter methodParameter = new MethodParameter(method, i);
 			/*
+			 * 寻找一个单一的非注解的参数，或者一个以 @Pauload 注解的参数
 			 * We're looking for a single non-annotated parameter, or one annotated with @Payload.
 			 * We ignore parameters with type Message, Consumer, Ack, ConsumerRecord because they
 			 * are not involved with conversion.
 			 */
+			// 通用的参数类型
 			Type parameterType = methodParameter.getGenericParameterType();
+			// 判断是否是 ConsumerRecord 类，可交换的
 			boolean isNotConvertible = parameterIsType(parameterType, ConsumerRecord.class);
+			// 判断是否是 Acknowledgment 类型
 			boolean isAck = parameterIsType(parameterType, Acknowledgment.class);
 			this.hasAckParameter |= isAck;
 			isNotConvertible |= isAck;
 			boolean isConsumer = parameterIsType(parameterType, Consumer.class);
 			isNotConvertible |= isConsumer;
+			// 是否为 ConsumerRecordMetadata 类型
 			boolean isMeta = parameterIsType(parameterType, ConsumerRecordMetadata.class);
 			this.hasMetadataParameter |= isMeta;
 			isNotConvertible |= isMeta;
 			if (isNotConvertible) {
+				// 记录参数数量
 				notConvertibleParameters++;
 			}
+			// 不是同义词 && 不是 Message 类型 && （方法参数注解数量是0，或者有 @Payload 注解的参数）
 			if (!isNotConvertible && !isMessageWithNoTypeInfo(parameterType)
 					&& (methodParameter.getParameterAnnotations().length == 0
 					|| methodParameter.hasParameterAnnotation(Payload.class))) {
 				if (genericParameterType == null) {
+					// 提取通用参数类型，主要是这里的逻辑，重点！！！
 					genericParameterType = extractGenericParameterTypFromMethodParameter(methodParameter);
 				}
 				else {
@@ -625,17 +642,27 @@ public abstract class MessagingMessageListenerAdapter<K, V> implements ConsumerS
 		return genericParameterType;
 	}
 
+	/**
+	 * 提取方法参数通用参数类型
+	 *
+	 * @param methodParameter
+	 * @return
+	 */
 	private Type extractGenericParameterTypFromMethodParameter(MethodParameter methodParameter) {
+		// 获取类型参数
 		Type genericParameterType = methodParameter.getGenericParameterType();
 		if (genericParameterType instanceof ParameterizedType) {
 			ParameterizedType parameterizedType = (ParameterizedType) genericParameterType;
+			// 是否为 Message 类型
 			if (parameterizedType.getRawType().equals(Message.class)) {
 				genericParameterType = ((ParameterizedType) genericParameterType).getActualTypeArguments()[0];
 			}
+			// 是否为 List 类型
 			else if (parameterizedType.getRawType().equals(List.class)
 					&& parameterizedType.getActualTypeArguments().length == 1) {
 
 				Type paramType = parameterizedType.getActualTypeArguments()[0];
+				// 检查参数类型是否为为 ConsumerRecord
 				this.isConsumerRecordList = paramType.equals(ConsumerRecord.class)
 						|| (isSimpleListOfConsumerRecord(paramType)
 						|| isListOfConsumerRecordUpperBounded(paramType));
@@ -653,6 +680,11 @@ public abstract class MessagingMessageListenerAdapter<K, V> implements ConsumerS
 		return genericParameterType;
 	}
 
+	/**
+	 * 参数类型是否是参数化类型，并且是 ConsumerRecord
+	 * @param paramType
+	 * @return
+	 */
 	private boolean isSimpleListOfConsumerRecord(Type paramType) {
 		return paramType instanceof ParameterizedType
 				&& ((ParameterizedType) paramType).getRawType().equals(ConsumerRecord.class);

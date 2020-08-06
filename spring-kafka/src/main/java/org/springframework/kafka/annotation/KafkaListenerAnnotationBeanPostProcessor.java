@@ -88,6 +88,9 @@ import org.springframework.util.StringUtils;
 import org.springframework.validation.Validator;
 
 /**
+ * bean 的后置处理器，它会注册用 @KafkaListener 注解标记的方法，注册成一个 kafka 消息监听容器，
+ * 这个容器会被 KafkaListenerContainerFactory kafka 监听器容器工厂根据注解参数来创建。
+ *
  * Bean post-processor that registers methods annotated with {@link KafkaListener}
  * to be invoked by a Kafka message listener container created under the covers
  * by a {@link org.springframework.kafka.config.KafkaListenerContainerFactory}
@@ -149,6 +152,7 @@ public class KafkaListenerAnnotationBeanPostProcessor<K, V>
 	private final KafkaHandlerMethodFactoryAdapter messageHandlerMethodFactory =
 			new KafkaHandlerMethodFactoryAdapter();
 
+	// 创建一个 kafka 监听器端点登记员
 	private final KafkaListenerEndpointRegistrar registrar = new KafkaListenerEndpointRegistrar();
 
 	private final AtomicInteger counter = new AtomicInteger();
@@ -258,6 +262,7 @@ public class KafkaListenerAnnotationBeanPostProcessor<K, V>
 			addFormatters(this.messageHandlerMethodFactory.defaultFormattingConversionService);
 		}
 
+		// 实际注册所有的监听器
 		// Actually register all listeners
 		this.registrar.afterPropertiesSet();
 	}
@@ -268,18 +273,22 @@ public class KafkaListenerAnnotationBeanPostProcessor<K, V>
 		return bean;
 	}
 
+	// bean 后置处理器
 	@Override
 	public Object postProcessAfterInitialization(final Object bean, final String beanName) throws BeansException {
 		if (!this.nonAnnotatedClasses.contains(bean.getClass())) {
 			Class<?> targetClass = AopUtils.getTargetClass(bean);
+			// 类级别上的 KafkaListener 注解
 			Collection<KafkaListener> classLevelListeners = findListenerAnnotations(targetClass);
 			final boolean hasClassLevelListeners = classLevelListeners.size() > 0;
 			final List<Method> multiMethods = new ArrayList<>();
+			// 标记有 KafkaListener 注解的方法
 			Map<Method, Set<KafkaListener>> annotatedMethods = MethodIntrospector.selectMethods(targetClass,
 					(MethodIntrospector.MetadataLookup<Set<KafkaListener>>) method -> {
 						Set<KafkaListener> listenerMethods = findListenerAnnotations(method);
 						return (!listenerMethods.isEmpty() ? listenerMethods : null);
 					});
+			// 根据类级别注解处理器方法上的 KafkaHandler 注解
 			if (hasClassLevelListeners) {
 				Set<Method> methodsWithHandler = MethodIntrospector.selectMethods(targetClass,
 						(ReflectionUtils.MethodFilter) method ->
@@ -295,6 +304,7 @@ public class KafkaListenerAnnotationBeanPostProcessor<K, V>
 				for (Map.Entry<Method, Set<KafkaListener>> entry : annotatedMethods.entrySet()) {
 					Method method = entry.getKey();
 					for (KafkaListener listener : entry.getValue()) {
+						// 执行标记有方法上的 KafkaListener 注解处理器
 						processKafkaListener(listener, method, bean, beanName);
 					}
 				}
@@ -302,6 +312,7 @@ public class KafkaListenerAnnotationBeanPostProcessor<K, V>
 							+ beanName + "': " + annotatedMethods);
 			}
 			if (hasClassLevelListeners) {
+				// 处理多方法监听器
 				processMultiMethodListeners(classLevelListeners, multiMethods, bean, beanName);
 			}
 		}
@@ -356,17 +367,22 @@ public class KafkaListenerAnnotationBeanPostProcessor<K, V>
 			}
 			checkedMethods.add(checked);
 		}
+		//类级别的监听器
 		for (KafkaListener classLevelListener : classLevelListeners) {
 			MultiMethodKafkaListenerEndpoint<K, V> endpoint =
 					new MultiMethodKafkaListenerEndpoint<>(checkedMethods, defaultMethod, bean);
+			// 处理监听器
 			processListener(endpoint, classLevelListener, bean, bean.getClass(), beanName);
 		}
 	}
 
 	protected void processKafkaListener(KafkaListener kafkaListener, Method method, Object bean, String beanName) {
+		// 检查 jdk 动态代理
 		Method methodToUse = checkProxy(method, bean);
+		// 创建一个方法 kafka 监听器端点
 		MethodKafkaListenerEndpoint<K, V> endpoint = new MethodKafkaListenerEndpoint<>();
 		endpoint.setMethod(methodToUse);
+		// 处理监听器
 		processListener(endpoint, kafkaListener, bean, methodToUse, beanName);
 	}
 
@@ -377,9 +393,11 @@ public class KafkaListenerAnnotationBeanPostProcessor<K, V>
 				// Found a @KafkaListener method on the target class for this JDK proxy ->
 				// is it also present on the proxy itself?
 				method = bean.getClass().getMethod(method.getName(), method.getParameterTypes());
+				// 寻找代理对象
 				Class<?>[] proxiedInterfaces = ((Advised) bean).getProxiedInterfaces();
 				for (Class<?> iface : proxiedInterfaces) {
 					try {
+						// 找到代理的目标类
 						method = iface.getMethod(method.getName(), method.getParameterTypes());
 						break;
 					}
@@ -404,6 +422,15 @@ public class KafkaListenerAnnotationBeanPostProcessor<K, V>
 		return method;
 	}
 
+	/**
+	 * 主要的处理消费者监听
+	 *
+	 * @param endpoint
+	 * @param kafkaListener
+	 * @param bean
+	 * @param adminTarget
+	 * @param beanName
+	 */
 	protected void processListener(MethodKafkaListenerEndpoint<?, ?> endpoint, KafkaListener kafkaListener,
 			Object bean, Object adminTarget, String beanName) {
 
@@ -411,6 +438,7 @@ public class KafkaListenerAnnotationBeanPostProcessor<K, V>
 		if (StringUtils.hasText(beanRef)) {
 			this.listenerScope.addListener(beanRef, bean);
 		}
+		// 设置目标 bean
 		endpoint.setBean(bean);
 		endpoint.setMessageHandlerMethodFactory(this.messageHandlerMethodFactory);
 		endpoint.setId(getEndpointId(kafkaListener));
@@ -426,17 +454,21 @@ public class KafkaListenerAnnotationBeanPostProcessor<K, V>
 				endpoint.setGroup((String) resolvedGroup);
 			}
 		}
+		// 设置并发量
 		String concurrency = kafkaListener.concurrency();
 		if (StringUtils.hasText(concurrency)) {
 			endpoint.setConcurrency(resolveExpressionAsInteger(concurrency, "concurrency"));
 		}
+		// 自动启动
 		String autoStartup = kafkaListener.autoStartup();
 		if (StringUtils.hasText(autoStartup)) {
 			endpoint.setAutoStartup(resolveExpressionAsBoolean(autoStartup, "autoStartup"));
 		}
+		// 解析属性
 		resolveKafkaProperties(endpoint, kafkaListener.properties());
 		endpoint.setSplitIterables(kafkaListener.splitIterables());
 
+		// 监听器容器工厂
 		KafkaListenerContainerFactory<?> factory = null;
 		String containerFactoryBeanName = resolve(kafkaListener.containerFactory());
 		if (StringUtils.hasText(containerFactoryBeanName)) {
@@ -452,10 +484,15 @@ public class KafkaListenerAnnotationBeanPostProcessor<K, V>
 		}
 
 		endpoint.setBeanFactory(this.beanFactory);
+
+		// 错误处理器 bean
 		String errorHandlerBeanName = resolveExpressionAsString(kafkaListener.errorHandler(), "errorHandler");
 		if (StringUtils.hasText(errorHandlerBeanName)) {
 			endpoint.setErrorHandler(this.beanFactory.getBean(errorHandlerBeanName, KafkaListenerErrorHandler.class));
 		}
+
+		// TODO: 2020/8/2 这里的入口和上面的入口哪个先执行？
+		// 注册端点
 		this.registrar.registerEndpoint(endpoint, factory);
 		if (StringUtils.hasText(beanRef)) {
 			this.listenerScope.removeListener(beanRef);
@@ -795,11 +832,23 @@ public class KafkaListenerAnnotationBeanPostProcessor<K, V>
 			this.handlerMethodFactory = kafkaHandlerMethodFactory1;
 		}
 
+		/**
+		 * 创建执行处理器方法
+		 *
+		 * @param bean
+		 * @param method
+		 * @return
+		 */
 		@Override
 		public InvocableHandlerMethod createInvocableHandlerMethod(Object bean, Method method) {
+			// 通过执行处理器方法工厂来创建执行处理器方法
 			return getHandlerMethodFactory().createInvocableHandlerMethod(bean, method);
 		}
 
+		/**
+		 * 创建处理器方法工厂
+		 * @return
+		 */
 		private MessageHandlerMethodFactory getHandlerMethodFactory() {
 			if (this.handlerMethodFactory == null) {
 				this.handlerMethodFactory = createDefaultMessageHandlerMethodFactory();
@@ -807,22 +856,36 @@ public class KafkaListenerAnnotationBeanPostProcessor<K, V>
 			return this.handlerMethodFactory;
 		}
 
+		/**
+		 * 默认的消息执行器方法工厂
+		 *
+		 * @return
+		 */
 		private MessageHandlerMethodFactory createDefaultMessageHandlerMethodFactory() {
+			// 创建默认的消息处理器方法工厂
 			DefaultMessageHandlerMethodFactory defaultFactory = new DefaultMessageHandlerMethodFactory();
+
+			// 设置验证器
 			Validator validator = KafkaListenerAnnotationBeanPostProcessor.this.registrar.getValidator();
 			if (validator != null) {
 				defaultFactory.setValidator(validator);
 			}
+			// 设置 bean 工厂
 			defaultFactory.setBeanFactory(KafkaListenerAnnotationBeanPostProcessor.this.beanFactory);
+			// 设置格式化转化器
 			this.defaultFormattingConversionService.addConverter(
 					new BytesToStringConverter(KafkaListenerAnnotationBeanPostProcessor.this.charset));
+			// 设置转化服务
 			defaultFactory.setConversionService(this.defaultFormattingConversionService);
+			// 设置消息转换器
 			GenericMessageConverter messageConverter = new GenericMessageConverter(this.defaultFormattingConversionService);
 			defaultFactory.setMessageConverter(messageConverter);
 
+			//设置 KafkaNullAwarePayloadArgumentResolver 参数解析器
 			List<HandlerMethodArgumentResolver> customArgumentsResolver =
 					new ArrayList<>(KafkaListenerAnnotationBeanPostProcessor.this.registrar.getCustomMethodArgumentResolvers());
 			// Has to be at the end - look at PayloadMethodArgumentResolver documentation
+			// 这个参数解析器，是处理监听器方法入参的主要处理类
 			customArgumentsResolver.add(new KafkaNullAwarePayloadArgumentResolver(messageConverter, validator));
 			defaultFactory.setCustomArgumentResolvers(customArgumentsResolver);
 
@@ -890,6 +953,9 @@ public class KafkaListenerAnnotationBeanPostProcessor<K, V>
 
 	}
 
+	/**
+	 * 这个参数解析器，是处理监听器方法入参的主要处理类，通过继承 PayloadMethodArgumentResolver 类来进行参数解析
+	 */
 	private static class KafkaNullAwarePayloadArgumentResolver extends PayloadMethodArgumentResolver {
 
 		KafkaNullAwarePayloadArgumentResolver(MessageConverter messageConverter, Validator validator) {
@@ -898,6 +964,8 @@ public class KafkaListenerAnnotationBeanPostProcessor<K, V>
 
 		@Override
 		public Object resolveArgument(MethodParameter parameter, Message<?> message) throws Exception { // NOSONAR
+			// 解析方法参数值，将 message 消息设置到参数上面去
+			// 先使用 PayloadMethodArgumentResolver 类型进行解析参数值
 			Object resolved = super.resolveArgument(parameter, message);
 			/*
 			 * Replace KafkaNull list elements with null.

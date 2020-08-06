@@ -329,13 +329,16 @@ public abstract class AbstractKafkaListenerContainerFactory<C extends AbstractMe
 
 	@Override
 	public void afterPropertiesSet() {
+		// bean 初始化属性设置之后，做些校验工作
 		if (this.errorHandler != null) {
+			// 批量处理器的异常处理器必须是 BatchErrorHandler 子类
 			if (Boolean.TRUE.equals(this.batchListener)) {
 				Assert.state(this.errorHandler instanceof BatchErrorHandler,
 						() -> "The error handler must be a BatchErrorHandler, not " +
 								this.errorHandler.getClass().getName());
 			}
 			else {
+				// 普通非批量处理器的异常处理器必须是 ErrorHandler 子类
 				Assert.state(this.errorHandler instanceof ErrorHandler,
 						() -> "The error handler must be an ErrorHandler, not " +
 								this.errorHandler.getClass().getName());
@@ -346,6 +349,7 @@ public abstract class AbstractKafkaListenerContainerFactory<C extends AbstractMe
 	@SuppressWarnings("unchecked")
 	@Override
 	public C createListenerContainer(KafkaListenerEndpoint endpoint) {
+		// 创建容器
 		C instance = createContainerInstance(endpoint);
 		JavaUtils.INSTANCE
 				.acceptIfNotNull(endpoint.getId(), instance::setBeanName);
@@ -353,8 +357,11 @@ public abstract class AbstractKafkaListenerContainerFactory<C extends AbstractMe
 			configureEndpoint((AbstractKafkaListenerEndpoint<K, V>) endpoint);
 		}
 
+		// 设置监听器容器
 		endpoint.setupListenerContainer(instance, this.messageConverter);
+		// 初始化容器
 		initializeContainer(instance, endpoint);
+		// 自定义配置容器
 		customizeContainer(instance);
 		return instance;
 	}
@@ -380,6 +387,8 @@ public abstract class AbstractKafkaListenerContainerFactory<C extends AbstractMe
 	protected abstract C createContainerInstance(KafkaListenerEndpoint endpoint);
 
 	/**
+	 * 初始化容器
+	 *
 	 * Further initialize the specified container.
 	 * <p>Subclasses can inherit from this method to apply extra
 	 * configuration if necessary.
@@ -406,6 +415,7 @@ public abstract class AbstractKafkaListenerContainerFactory<C extends AbstractMe
 		else if (this.autoStartup != null) {
 			instance.setAutoStartup(this.autoStartup);
 		}
+		// 设置记录拦截器
 		instance.setRecordInterceptor(this.recordInterceptor);
 		JavaUtils.INSTANCE
 				.acceptIfNotNull(this.phase, instance::setPhase)

@@ -45,14 +45,17 @@ import org.springframework.validation.Validator;
  */
 public class KafkaListenerEndpointRegistrar implements BeanFactoryAware, InitializingBean {
 
+	// 端点描述器
 	private final List<KafkaListenerEndpointDescriptor> endpointDescriptors = new ArrayList<>();
 
 	private List<HandlerMethodArgumentResolver> customMethodArgumentResolvers = new ArrayList<>();
 
+	// 端点注册器
 	private KafkaListenerEndpointRegistry endpointRegistry;
 
 	private MessageHandlerMethodFactory messageHandlerMethodFactory;
 
+	// 监听器容器工厂
 	private KafkaListenerContainerFactory<?> containerFactory;
 
 	private String containerFactoryBeanName;
@@ -181,19 +184,28 @@ public class KafkaListenerEndpointRegistrar implements BeanFactoryAware, Initial
 
 	@Override
 	public void afterPropertiesSet() {
+		// 属性配置完毕之后，注册所有端点
 		registerAllEndpoints();
 	}
 
 	protected void registerAllEndpoints() {
+		// 注册所有容器
 		synchronized (this.endpointDescriptors) {
 			for (KafkaListenerEndpointDescriptor descriptor : this.endpointDescriptors) {
 				this.endpointRegistry.registerListenerContainer(
 						descriptor.endpoint, resolveContainerFactory(descriptor));
 			}
+			// 设置立即启动标识
 			this.startImmediately = true;  // trigger immediate startup
 		}
 	}
 
+	/**
+	 * 根据描述器解析容器监听器工厂
+	 *
+	 * @param descriptor
+	 * @return
+	 */
 	private KafkaListenerContainerFactory<?> resolveContainerFactory(KafkaListenerEndpointDescriptor descriptor) {
 		if (descriptor.containerFactory != null) {
 			return descriptor.containerFactory;
@@ -215,6 +227,8 @@ public class KafkaListenerEndpointRegistrar implements BeanFactoryAware, Initial
 	}
 
 	/**
+	 * 注册一个端点处理器
+	 *
 	 * Register a new {@link KafkaListenerEndpoint} alongside the
 	 * {@link KafkaListenerContainerFactory} to use to create the underlying container.
 	 * <p>The {@code factory} may be {@code null} if the default factory has to be
@@ -229,6 +243,7 @@ public class KafkaListenerEndpointRegistrar implements BeanFactoryAware, Initial
 		KafkaListenerEndpointDescriptor descriptor = new KafkaListenerEndpointDescriptor(endpoint, factory);
 		synchronized (this.endpointDescriptors) {
 			if (this.startImmediately) { // Register and start immediately
+				// 注册监听器容器实例
 				this.endpointRegistry.registerListenerContainer(descriptor.endpoint,
 						resolveContainerFactory(descriptor), true);
 			}

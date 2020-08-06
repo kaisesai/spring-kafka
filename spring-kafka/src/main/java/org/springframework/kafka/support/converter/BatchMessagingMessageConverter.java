@@ -40,6 +40,8 @@ import org.springframework.messaging.Message;
 import org.springframework.messaging.support.MessageBuilder;
 
 /**
+ * 批量消息转换器
+ *
  * A Messaging {@link MessageConverter} implementation used with a batch
  * message listener; the consumer record values are extracted into a collection in
  * the message payload.
@@ -122,6 +124,15 @@ public class BatchMessagingMessageConverter implements BatchMessageConverter {
 		return this.recordConverter;
 	}
 
+	/**
+	 * 转化为消息
+	 *
+	 * @param records        the records.
+	 * @param acknowledgment the acknowledgment.
+	 * @param consumer       the consumer.
+	 * @param type
+	 * @return
+	 */
 	@Override
 	public Message<?> toMessage(List<ConsumerRecord<?, ?>> records, Acknowledgment acknowledgment,
 			Consumer<?, ?> consumer, Type type) {
@@ -177,6 +188,7 @@ public class BatchMessagingMessageConverter implements BatchMessageConverter {
 				natives.add(record.headers());
 			}
 		}
+		// payloads 是一个 List<Object> 消息
 		return MessageBuilder.createMessage(payloads, kafkaMessageHeaders);
 	}
 

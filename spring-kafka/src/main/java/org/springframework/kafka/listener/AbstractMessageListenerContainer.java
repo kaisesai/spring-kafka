@@ -416,9 +416,12 @@ public abstract class AbstractMessageListenerContainer<K, V>
 		synchronized (this.lifecycleMonitor) {
 			if (isRunning()) {
 				if (wait) {
+					// 用到了闭锁
 					final CountDownLatch latch = new CountDownLatch(1);
+					// 释放资源加一
 					doStop(latch::countDown);
 					try {
+						// 获取资源减一
 						latch.await(this.containerProperties.getShutdownTimeout(), TimeUnit.MILLISECONDS); // NOSONAR
 						publishContainerStoppedEvent();
 					}

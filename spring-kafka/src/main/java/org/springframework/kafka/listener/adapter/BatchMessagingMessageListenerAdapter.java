@@ -36,6 +36,10 @@ import org.springframework.messaging.support.MessageBuilder;
 
 
 /**
+ * 批量消息监听器适配器，使用 HandlerAdapter 监听接收到的批量消息，把 kafka 的消息转成 spring 的 Message 消息。
+ *
+ * 原始的 List<ConsumerRecord> 和 Acknowledgment 作为添加的参数来提供。当需要的时候，它们可以被注到方法的参数上面去。
+ *
  * A {@link org.springframework.kafka.listener.MessageListener MessageListener}
  * adapter that invokes a configurable {@link HandlerAdapter}; used when the factory is
  * configured for the listener to receive batches of messages.
@@ -136,13 +140,16 @@ public class BatchMessagingMessageListenerAdapter<K, V> extends MessagingMessage
 	@Override
 	public void onMessage(List<ConsumerRecord<K, V>> records, Acknowledgment acknowledgment, Consumer<?, ?> consumer) {
 		Message<?> message;
+		// 监听器参数类型是否为批量的消息记录
 		if (!isConsumerRecordList()) {
+			// 是否为 message list 类型，或者批量消息接收适配器
 			if (isMessageList() || this.batchToRecordAdapter != null) {
 				List<Message<?>> messages = new ArrayList<>(records.size());
 				for (ConsumerRecord<K, V> record : records) {
 					messages.add(toMessagingMessage(record, acknowledgment, consumer));
 				}
 				if (this.batchToRecordAdapter == null) {
+					// 将消息设置到 payload 中
 					message = MessageBuilder.withPayload(messages).build();
 				}
 				else {
@@ -152,6 +159,8 @@ public class BatchMessagingMessageListenerAdapter<K, V> extends MessagingMessage
 				}
 			}
 			else {
+				// 参数类型为其他，比如 String
+				// payloads 是一个 List<Object> 消息
 				message = toMessagingMessage(records, acknowledgment, consumer);
 			}
 		}
@@ -159,20 +168,32 @@ public class BatchMessagingMessageListenerAdapter<K, V> extends MessagingMessage
 			message = NULL_MESSAGE; // optimization since we won't need any conversion to invoke
 		}
 		logger.debug(() -> "Processing [" + message + "]");
+		// 不是 isConsumerRecordList 消息
 		invoke(records, acknowledgment, consumer, message);
 	}
 
+	/**
+	 * 执行消息转换
+	 *
+	 * @param records
+	 * @param acknowledgment
+	 * @param consumer
+	 * @param messageArg
+	 */
 	protected void invoke(Object records, Acknowledgment acknowledgment, Consumer<?, ?> consumer,
 			final Message<?> messageArg) {
 
 		Message<?> message = messageArg;
 		try {
+			// 执行消息转换
 			Object result = invokeHandler(records, acknowledgment, message, consumer);
 			if (result != null) {
+				// 处理结果
 				handleResult(result, records, message);
 			}
 		}
 		catch (ListenerExecutionFailedException e) { // NOSONAR ex flow control
+			// 消息转换器异常处理器
 			if (this.errorHandler != null) {
 				try {
 					if (message.equals(NULL_MESSAGE)) {

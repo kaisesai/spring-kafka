@@ -178,6 +178,7 @@ public class ConcurrentMessageListenerContainer<K, V> extends AbstractMessageLis
 			}
 			setRunning(true);
 
+			// 根据并发数量，创建容器实例 -> KafkaMessageListenerContainer
 			for (int i = 0; i < this.concurrency; i++) {
 				KafkaMessageListenerContainer<K, V> container =
 						constructContainer(containerProperties, topicPartitions, i);
@@ -201,6 +202,7 @@ public class ConcurrentMessageListenerContainer<K, V> extends AbstractMessageLis
 				if (isPaused()) {
 					container.pause();
 				}
+				// 启动监听器容器
 				container.start();
 				this.containers.add(container);
 			}

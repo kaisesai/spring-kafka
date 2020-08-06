@@ -44,10 +44,12 @@ public class HandlerAdapter {
 	}
 
 	public Object invoke(Message<?> message, Object... providedArgs) throws Exception { //NOSONAR
+		// 执行处理器方法
 		if (this.invokerHandlerMethod != null) {
 			return this.invokerHandlerMethod.invoke(message, providedArgs);
 		}
 		else if (this.delegatingHandler.hasDefaultHandler()) {
+			// 委派的执行处理器
 			// Needed to avoid returning raw Message which matches Object
 			Object[] args = new Object[providedArgs.length + 1];
 			args[0] = message.getPayload();

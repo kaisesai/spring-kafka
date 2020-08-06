@@ -148,6 +148,8 @@ public class KafkaListenerEndpointRegistry implements DisposableBean, SmartLifec
 	}
 
 	/**
+	 * 创建一个消息监听器容器
+	 *
 	 * Create a message listener container for the given {@link KafkaListenerEndpoint}.
 	 * <p>This create the necessary infrastructure to honor that endpoint
 	 * with regards to its configuration.
@@ -168,12 +170,16 @@ public class KafkaListenerEndpointRegistry implements DisposableBean, SmartLifec
 
 		String id = endpoint.getId();
 		Assert.hasText(id, "Endpoint id must not be empty");
+		// 同步处理
 		synchronized (this.listenerContainers) {
 			Assert.state(!this.listenerContainers.containsKey(id),
 					"Another endpoint is already registered with id '" + id + "'");
+			// 创建监听器容器
 			MessageListenerContainer container = createListenerContainer(endpoint, factory);
+			// 有多个监听器容器
 			this.listenerContainers.put(id, container);
 			if (StringUtils.hasText(endpoint.getGroup()) && this.applicationContext != null) {
+				// 监听器容器分组
 				List<MessageListenerContainer> containerGroup;
 				if (this.applicationContext.containsBean(endpoint.getGroup())) {
 					containerGroup = this.applicationContext.getBean(endpoint.getGroup(), List.class);
@@ -184,7 +190,9 @@ public class KafkaListenerEndpointRegistry implements DisposableBean, SmartLifec
 				}
 				containerGroup.add(container);
 			}
+			// 立即开始
 			if (startImmediately) {
+				// 必须时立即开始
 				startIfNecessary(container);
 			}
 		}
@@ -199,6 +207,7 @@ public class KafkaListenerEndpointRegistry implements DisposableBean, SmartLifec
 	protected MessageListenerContainer createListenerContainer(KafkaListenerEndpoint endpoint,
 			KafkaListenerContainerFactory<?> factory) {
 
+		// 通过工厂 bean 创建容器对象
 		MessageListenerContainer listenerContainer = factory.createListenerContainer(endpoint);
 
 		if (listenerContainer instanceof InitializingBean) {
@@ -309,6 +318,7 @@ public class KafkaListenerEndpointRegistry implements DisposableBean, SmartLifec
 	 */
 	private void startIfNecessary(MessageListenerContainer listenerContainer) {
 		if (this.contextRefreshed || listenerContainer.isAutoStartup()) {
+			// 启动监听器容器
 			listenerContainer.start();
 		}
 	}

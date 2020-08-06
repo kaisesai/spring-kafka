@@ -49,6 +49,7 @@ public class ConcurrentKafkaListenerContainerFactory<K, V>
 	private Integer concurrency;
 
 	/**
+	 * 指定容器并发量
 	 * Specify the container concurrency.
 	 * @param concurrency the number of consumers to create.
 	 * @see ConcurrentMessageListenerContainer#setConcurrency(int)
@@ -59,6 +60,7 @@ public class ConcurrentKafkaListenerContainerFactory<K, V>
 
 	@Override
 	protected ConcurrentMessageListenerContainer<K, V> createContainerInstance(KafkaListenerEndpoint endpoint) {
+		// 创建监听器容器
 		TopicPartitionOffset[] topicPartitions = endpoint.getTopicPartitionsToAssign();
 		if (topicPartitions != null && topicPartitions.length > 0) {
 			ContainerProperties properties = new ContainerProperties(topicPartitions);
@@ -80,8 +82,9 @@ public class ConcurrentKafkaListenerContainerFactory<K, V>
 	@Override
 	protected void initializeContainer(ConcurrentMessageListenerContainer<K, V> instance,
 			KafkaListenerEndpoint endpoint) {
-
+		// 初始化容器
 		super.initializeContainer(instance, endpoint);
+		// 设置并发量
 		if (endpoint.getConcurrency() != null) {
 			instance.setConcurrency(endpoint.getConcurrency());
 		}

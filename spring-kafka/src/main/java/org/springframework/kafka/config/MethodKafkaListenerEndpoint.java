@@ -40,6 +40,8 @@ import org.springframework.messaging.handler.invocation.InvocableHandlerMethod;
 import org.springframework.util.Assert;
 
 /**
+ * 方法上的消息监听器容器
+ *
  * A {@link KafkaListenerEndpoint} providing the method to invoke to process
  * an incoming message for this endpoint.
  *
@@ -144,37 +146,54 @@ public class MethodKafkaListenerEndpoint<K, V> extends AbstractKafkaListenerEndp
 		return this.messageHandlerMethodFactory;
 	}
 
+	/**
+	 * 创建消息监听器适配器
+	 *
+	 * @param container        the {@link MessageListenerContainer} to create a {@link MessageListener}.
+	 * @param messageConverter the message converter - may be null.
+	 * @return
+	 */
 	@Override
 	protected MessagingMessageListenerAdapter<K, V> createMessageListener(MessageListenerContainer container,
 			MessageConverter messageConverter) {
 
 		Assert.state(this.messageHandlerMethodFactory != null,
 				"Could not create message listener - MessageHandlerMethodFactory not set");
+		// 消息监听器适配器
 		MessagingMessageListenerAdapter<K, V> messageListener = createMessageListenerInstance(messageConverter);
+		// 设置执行器方法
 		messageListener.setHandlerMethod(configureListenerAdapter(messageListener));
+		// 重试 topic
 		JavaUtils.INSTANCE
 			.acceptIfNotNull(getReplyTopic(), replyTopic -> {
 				Assert.state(getMethod().getReturnType().equals(void.class)
 						|| getReplyTemplate() != null, "a KafkaTemplate is required to support replies");
 				messageListener.setReplyTopic(replyTopic);
 			})
+		// 重试模板
 			.acceptIfNotNull(getReplyTemplate(), messageListener::setReplyTemplate);
 
 		return messageListener;
 	}
 
 	/**
+	 * 处理器适配器
+	 *
 	 * Create a {@link HandlerAdapter} for this listener adapter.
 	 * @param messageListener the listener adapter.
 	 * @return the handler adapter.
 	 */
 	protected HandlerAdapter configureListenerAdapter(MessagingMessageListenerAdapter<K, V> messageListener) {
+		// 执行处理器方法
 		InvocableHandlerMethod invocableHandlerMethod =
 				this.messageHandlerMethodFactory.createInvocableHandlerMethod(getBean(), getMethod());
+		// 处理器适配器
 		return new HandlerAdapter(invocableHandlerMethod);
 	}
 
 	/**
+	 * 创建一个消息监听器适配器
+	 *
 	 * Create an empty {@link MessagingMessageListenerAdapter} instance.
 	 * @param messageConverter the converter (may be null).
 	 * @return the {@link MessagingMessageListenerAdapter} instance.
@@ -182,6 +201,7 @@ public class MethodKafkaListenerEndpoint<K, V> extends AbstractKafkaListenerEndp
 	protected MessagingMessageListenerAdapter<K, V> createMessageListenerInstance(MessageConverter messageConverter) {
 		MessagingMessageListenerAdapter<K, V> listener;
 		if (isBatchListener()) {
+			// 批量消息监听器适配器
 			BatchMessagingMessageListenerAdapter<K, V> messageListener = new BatchMessagingMessageListenerAdapter<K, V>(
 					this.bean, this.method, this.errorHandler);
 			if (getBatchToRecordAdapter() != null) {
@@ -193,6 +213,7 @@ public class MethodKafkaListenerEndpoint<K, V> extends AbstractKafkaListenerEndp
 			listener = messageListener;
 		}
 		else {
+			// 非批量消息监听器适配器
 			RecordMessagingMessageListenerAdapter<K, V> messageListener = new RecordMessagingMessageListenerAdapter<K, V>(
 					this.bean, this.method, this.errorHandler);
 			if (messageConverter instanceof RecordMessageConverter) {

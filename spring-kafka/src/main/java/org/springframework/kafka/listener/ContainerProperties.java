@@ -33,6 +33,8 @@ import org.springframework.transaction.TransactionDefinition;
 import org.springframework.util.Assert;
 
 /**
+ * 监听器容器运行时环境参数
+ *
  * Contains runtime properties for a listener container.
  *
  * @author Gary Russell

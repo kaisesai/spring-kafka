@@ -25,6 +25,8 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.springframework.util.Assert;
 
 /**
+ * 使用组合模式拦截器
+ *
  * A {@link RecordInterceptor} that delegates to one or more {@link RecordInterceptor} in
  * order.
  *
@@ -45,6 +47,7 @@ public class CompositeRecordInterceptor<K, V> implements RecordInterceptor<K, V>
 	public CompositeRecordInterceptor(RecordInterceptor<K, V>... delegates) {
 		Assert.notNull(delegates, "'delegates' cannot be null");
 		Assert.noNullElements(delegates, "'delegates' cannot have null entries");
+		// 委派
 		this.delegates.addAll(Arrays.asList(delegates));
 	}
 

@@ -479,23 +479,37 @@ public abstract class AbstractKafkaListenerEndpoint<K, V>
 	protected abstract MessagingMessageListenerAdapter<K, V> createMessageListener(MessageListenerContainer container,
 			MessageConverter messageConverter);
 
+	/**
+	 * 设置消息监听器
+	 *
+	 * @param container
+	 * @param messageConverter
+	 */
 	@SuppressWarnings("unchecked")
 	private void setupMessageListener(MessageListenerContainer container, MessageConverter messageConverter) {
+		// 消息监听器适配器
 		MessagingMessageListenerAdapter<K, V> adapter = createMessageListener(container, messageConverter);
+
+		// 设置重试头
 		if (this.replyHeadersConfigurer != null) {
 			adapter.setReplyHeadersConfigurer(this.replyHeadersConfigurer);
 		}
+		// 设置分割器
 		adapter.setSplitIterables(this.splitIterables);
+
 		Object messageListener = adapter;
 		Assert.state(messageListener != null,
 				() -> "Endpoint [" + this + "] must provide a non null message listener");
 		Assert.state(this.retryTemplate == null || !this.batchListener,
 				"A 'RetryTemplate' is not supported with a batch listener; consider configuring the container "
 				+ "with a suitably configured 'SeekToCurrentBatchErrorHandler' instead");
+		// 重试消息监听器
 		if (this.retryTemplate != null) {
 			messageListener = new RetryingMessageListenerAdapter<>((MessageListener<K, V>) messageListener,
 					this.retryTemplate, this.recoveryCallback, this.statefulRetry);
 		}
+
+		// 记录过滤器
 		if (this.recordFilterStrategy != null) {
 			if (this.batchListener) {
 				if (((MessagingMessageListenerAdapter<K, V>) messageListener).isConsumerRecords()) {
@@ -503,15 +517,18 @@ public abstract class AbstractKafkaListenerEndpoint<K, V>
 							+ (this.id != null ? " id: " + this.id : ""));
 				}
 				else {
+					// 过滤器批量消息监听器适配器
 					messageListener = new FilteringBatchMessageListenerAdapter<>(
 							(BatchMessageListener<K, V>) messageListener, this.recordFilterStrategy, this.ackDiscarded);
 				}
 			}
 			else {
+				// 过滤器消息监听器适配器
 				messageListener = new FilteringMessageListenerAdapter<>((MessageListener<K, V>) messageListener,
 						this.recordFilterStrategy, this.ackDiscarded);
 			}
 		}
+		// 设置消息监听器
 		container.setupMessageListener(messageListener);
 	}
 

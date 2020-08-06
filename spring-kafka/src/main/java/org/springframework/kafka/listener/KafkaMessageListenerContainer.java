@@ -150,6 +150,7 @@ public class KafkaMessageListenerContainer<K, V> // NOSONAR line count
 		// NOSONAR
 	});
 
+	// 监听器消费者
 	private volatile ListenerConsumer listenerConsumer;
 
 	private volatile ListenableFuture<?> listenerConsumerFuture;
@@ -282,23 +283,33 @@ public class KafkaMessageListenerContainer<K, V> // NOSONAR line count
 		if (isRunning()) {
 			return;
 		}
+		// 检查 topics
 		if (this.clientIdSuffix == null) { // stand-alone container
 			checkTopics();
 		}
 		ContainerProperties containerProperties = getContainerProperties();
+		// 检查 ack 模式
 		checkAckMode(containerProperties);
 
+		// 消息监听器
 		Object messageListener = containerProperties.getMessageListener();
+
+		// 消费者线程执行器
 		if (containerProperties.getConsumerTaskExecutor() == null) {
 			SimpleAsyncTaskExecutor consumerExecutor = new SimpleAsyncTaskExecutor(
 					(getBeanName() == null ? "" : getBeanName()) + "-C-");
 			containerProperties.setConsumerTaskExecutor(consumerExecutor);
 		}
+		// 消息监听器
 		GenericMessageListener<?> listener = (GenericMessageListener<?>) messageListener;
+		// 监听器类型
 		ListenerType listenerType = determineListenerType(listener);
+		// 监听器消费者任务
 		this.listenerConsumer = new ListenerConsumer(listener, listenerType);
 		setRunning(true);
 		this.startLatch = new CountDownLatch(1);
+
+		// 提交监听器消费者任务
 		this.listenerConsumerFuture = containerProperties
 				.getConsumerTaskExecutor()
 				.submitListenable(this.listenerConsumer);
@@ -428,7 +439,9 @@ public class KafkaMessageListenerContainer<K, V> // NOSONAR line count
 				+ "]";
 	}
 
-
+	/**
+	 * 监听器消费者
+	 */
 	private final class ListenerConsumer implements SchedulingAwareRunnable, ConsumerSeekCallback {
 
 		private static final String ERROR_HANDLER_THREW_AN_EXCEPTION = "Error handler threw an exception";
@@ -989,17 +1002,24 @@ public class KafkaMessageListenerContainer<K, V> // NOSONAR line count
 
 		@Override
 		public void run() {
+			// 开始真正的执行任务
 			ListenerUtils.setLogOnlyMetadata(this.containerProperties.isOnlyLogRecordMetadata());
+			// 推送消费者启动中事件
 			publishConsumerStartingEvent();
 			this.consumerThread = Thread.currentThread();
+			// 设置 seek
 			setupSeeks();
 			KafkaUtils.setConsumerGroupId(this.consumerGroupId);
 			this.count = 0;
 			this.last = System.currentTimeMillis();
+			// 初始化指派的分区
 			initAssignedPartitions();
+			// 发布消费者已启动事件
 			publishConsumerStartedEvent();
+			// 无限循环的处理消息
 			while (isRunning()) {
 				try {
+					// 拉取消息并处理
 					pollAndInvoke();
 				}
 				catch (@SuppressWarnings(UNUSED) WakeupException e) {
@@ -1040,10 +1060,12 @@ public class KafkaMessageListenerContainer<K, V> // NOSONAR line count
 						runnable.run();
 					}
 					this.logger.error(e, "Stopping container due to an Error");
+					// 清理资源
 					wrapUp();
 					throw e;
 				}
 			}
+			// 清理资源
 			wrapUp();
 		}
 
@@ -1065,13 +1087,17 @@ public class KafkaMessageListenerContainer<K, V> // NOSONAR line count
 		}
 
 		protected void pollAndInvoke() {
+			// 拉取消息并处理
 			if (!this.autoCommit && !this.isRecordAck) {
 				processCommits();
 			}
+			// 必要的时候暂停
 			idleBetweenPollIfNecessary();
+			// 寻求
 			if (this.seeks.size() > 0) {
 				processSeeks();
 			}
+			// 处理消费者
 			pauseConsumerIfNecessary();
 			this.lastPoll = System.currentTimeMillis();
 			this.polling.set(true);
@@ -1092,6 +1118,7 @@ public class KafkaMessageListenerContainer<K, V> // NOSONAR line count
 				if (this.containerProperties.getIdleEventInterval() != null) {
 					this.lastReceive = System.currentTimeMillis();
 				}
+				// 真正的执行消息消费
 				invokeListener(records);
 			}
 			else {
@@ -1382,6 +1409,7 @@ public class KafkaMessageListenerContainer<K, V> // NOSONAR line count
 
 		private void invokeBatchListener(final ConsumerRecords<K, V> records) {
 			List<ConsumerRecord<K, V>> recordList = null;
+			// 这里判断了下是否需要处理批量满的消息
 			if (!this.wantsFullRecords) {
 				recordList = createRecordList(records);
 			}
@@ -1486,6 +1514,8 @@ public class KafkaMessageListenerContainer<K, V> // NOSONAR line count
 		}
 
 		/**
+		 * 直接执行批量消息的方法
+		 *
 		 * Actually invoke the batch listener.
 		 * @param records the records (needed to invoke the error handler)
 		 * @param recordList the list of records (actually passed to the listener).
@@ -1497,6 +1527,7 @@ public class KafkaMessageListenerContainer<K, V> // NOSONAR line count
 
 			Object sample = startMicrometerSample();
 			try {
+				// 执行批量消息处理
 				invokeBatchOnMessage(records, recordList);
 				successTimer(sample);
 			}
@@ -1561,7 +1592,7 @@ public class KafkaMessageListenerContainer<K, V> // NOSONAR line count
 
 		private void invokeBatchOnMessage(final ConsumerRecords<K, V> records, // NOSONAR - Cyclomatic Complexity
 				List<ConsumerRecord<K, V>> recordList) throws InterruptedException {
-
+			// 执行批量消费消息
 			invokeBatchOnMessageWithRecordsOrList(records, recordList);
 			List<ConsumerRecord<?, ?>> toSeek = null;
 			if (this.nackSleep >= 0) {
@@ -1999,6 +2030,7 @@ public class KafkaMessageListenerContainer<K, V> // NOSONAR line count
 			}
 		}
 
+		// 提交 kafka 消息
 		private void processCommits() {
 			this.count += this.acks.size();
 			handleAcks();
@@ -2693,6 +2725,9 @@ public class KafkaMessageListenerContainer<K, V> // NOSONAR line count
 
 	}
 
+	/**
+	 * 监听者异步回调
+	 */
 	private class StopCallback implements ListenableFutureCallback<Object> {
 
 		private final Runnable callback;
